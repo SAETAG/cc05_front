@@ -332,156 +332,37 @@ const initializeExperience = async (): Promise<void> => {
 };
 
 // 経験値を取得する関数を改善
-const getExperience = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const sessionTicket = Cookies.get("token");
-    if (!sessionTicket) {
-      reject(new Error("セッションチケットが見つかりません"));
-      return;
-    }
-
-    PlayFab.settings.sessionTicket = sessionTicket;
-    console.log("経験値取得開始 - セッションチケット:", sessionTicket);
-
-    PlayFab.PlayFabClient.GetPlayerStatistics(
-      {
-        StatisticNames: ["Experience"]
-      },
-      (result: PlayFabResult) => {
-        console.log("GetPlayerStatistics レスポンス:", result);
-        
-        if (result?.error) {
-          console.error("GetPlayerStatisticsエラー:", result.error);
-          reject(result.error);
-          return;
-        }
-
-        // データが存在しない場合は0を返す
-        if (!result?.data?.Statistics || result.data.Statistics.length === 0) {
-          console.log("統計データが存在しません");
-          resolve(0);
-          return;
-        }
-
-        // データが存在する場合はその値を返す
-        const experience = result.data.Statistics.find(stat => stat.StatisticName === "Experience")?.Value || 0;
-        console.log("取得した経験値:", experience);
-        resolve(experience);
-      },
-      (error: PlayFabError) => {
-        console.error("GetPlayerStatisticsエラー:", error);
-        reject(error);
-      }
-    );
-  });
-};
-
-// 経験値を更新する関数を改善
-export const updateExperience = async (expAmount: number): Promise<void> => {
-  try {
-    // セッションの有効性を確認
-    const isValidSession = await validateSession();
-    if (!isValidSession) {
-      console.log("セッションが無効です。再認証を試みます...");
-      await reAuthenticate();
-    }
-
-    return new Promise((resolve, reject) => {
+export const getExperience = async (): Promise<number> => {
+  return callPlayFabAPI(async () => {
+    return new Promise<number>((resolve, reject) => {
       const sessionTicket = Cookies.get("token");
       if (!sessionTicket) {
+        console.error("セッションチケットが見つかりません");
         reject(new Error("セッションチケットが見つかりません"));
         return;
       }
 
       PlayFab.settings.sessionTicket = sessionTicket;
-      console.log("経験値更新開始 - セッションチケット:", sessionTicket);
 
-      // 現在の経験値を取得
-      getExperience()
-        .then(currentExp => {
-          console.log("現在の経験値:", currentExp);
-          // 新しい経験値を計算
-          const newExp = currentExp + expAmount;
-          console.log("更新後の経験値:", newExp);
-
-          // 経験値を更新（リトライロジック付き）
-          const updateWithRetry = (retryCount = 0) => {
-            PlayFab.PlayFabClient.UpdatePlayerStatistics(
-              {
-                Statistics: [
-                  {
-                    StatisticName: "Experience",
-                    Value: newExp,
-                    Version: 0 // バージョンを明示的に指定
-                  }
-                ]
-              },
-              (result: PlayFabResult) => {
-                console.log("UpdatePlayerStatistics レスポンス:", result);
-                if (result?.error) {
-                  console.error("UpdatePlayerStatisticsエラー:", result.error);
-                  if (retryCount < 2) {
-                    console.log(`リトライを試みます (${retryCount + 1}/3)`);
-                    setTimeout(() => updateWithRetry(retryCount + 1), 1000);
-                    return;
-                  }
-                  reject(result.error);
-                  return;
-                }
-
-                // 更新後の値を確認（少し待機してから）
-                setTimeout(() => {
-                  getExperience()
-                    .then(verifiedExp => {
-                      console.log("更新後の確認 - 経験値:", verifiedExp);
-                      if (verifiedExp === newExp) {
-                        console.log("経験値の更新が完了しました");
-                        resolve();
-                      } else if (retryCount < 2) {
-                        console.log(`確認に失敗しました。リトライを試みます (${retryCount + 1}/3)`);
-                        setTimeout(() => updateWithRetry(retryCount + 1), 1000);
-                      } else {
-                        console.warn("経験値の更新が正しく保存されていない可能性があります");
-                        // エラーをスローせずに、更新を成功として扱う
-                        console.log("更新は完了しましたが、確認に失敗しました");
-                        resolve();
-                      }
-                    })
-                    .catch(error => {
-                      console.error("更新後の確認に失敗しました:", error);
-                      if (retryCount < 2) {
-                        console.log(`確認に失敗しました。リトライを試みます (${retryCount + 1}/3)`);
-                        setTimeout(() => updateWithRetry(retryCount + 1), 1000);
-                      } else {
-                        // エラーをスローせずに、更新を成功として扱う
-                        console.log("更新は完了しましたが、確認に失敗しました");
-                        resolve();
-                      }
-                    });
-                }, 5000); // 5秒待機
-              },
-              (error: PlayFabError) => {
-                console.error("UpdatePlayerStatisticsエラー:", error);
-                if (retryCount < 2) {
-                  console.log(`リトライを試みます (${retryCount + 1}/3)`);
-                  setTimeout(() => updateWithRetry(retryCount + 1), 1000);
-                  return;
-                }
-                reject(error);
-              }
+      PlayFab.PlayFabClient.GetPlayerStatistics(
+        {
+          StatisticNames: ["Experience"]
+        },
+        (result: PlayFabResult) => {
+          if (result?.data?.Statistics) {
+            const experienceStat = result.data.Statistics.find(
+              (stat) => stat.StatisticName === "Experience"
             );
-          };
-
-          // 最初の更新を実行
-          updateWithRetry();
-        })
-        .catch(error => {
-          console.error("経験値の取得に失敗しました:", error);
+            resolve(experienceStat?.Value || 0);
+          } else {
+            resolve(0);
+          }
+        },
+        (error: PlayFabError) => {
+          console.error("経験値の取得エラー:", error);
           reject(error);
-        });
+        }
+      );
     });
-  } catch (error) {
-    console.error("経験値の更新に失敗しました:", error);
-    throw error;
-  }
+  });
 };

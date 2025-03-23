@@ -148,10 +148,6 @@ export default function Stage2BattlePage() {
       await saveStageComplete(2)
       console.log("ステージ2クリアデータを保存しました")
 
-      // 経験値を加算（50exp）
-      await updateExperience(50)
-      console.log("経験値を50加算しました")
-
       router.push("/closet/2/clear")
     } catch (error) {
       console.error("ステージ2クリアデータの保存に失敗:", error)
