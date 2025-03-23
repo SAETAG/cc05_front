@@ -250,116 +250,21 @@ export const getStageComplete = async (stageNumber: number): Promise<boolean> =>
       }
 
       PlayFab.settings.sessionTicket = sessionTicket;
-      console.log(`GetUserData呼び出し前のセッションチケット:`, sessionTicket);
 
       PlayFab.PlayFabClient.GetUserData(
         {
           Keys: [`stage${stageNumber}_complete`]
         },
         (result: PlayFabResult) => {
-          console.log(`GetUserData レスポンス (stage${stageNumber}):`, result);
-          const isComplete = result?.data?.Data?.[`stage${stageNumber}_complete`]?.Value === "true";
-          console.log(`ステージ${stageNumber}完了状態:`, isComplete);
-          resolve(isComplete);
+          if (result?.data?.Data) {
+            const stageData = result.data.Data[`stage${stageNumber}_complete`];
+            resolve(stageData?.Value === "true");
+          } else {
+            resolve(false);
+          }
         },
         (error: PlayFabError) => {
           console.error(`ステージ${stageNumber}のクリアデータの取得エラー:`, error);
-          reject(error?.errorMessage || error || "不明なエラーが発生しました");
-        }
-      );
-    });
-  });
-};
-
-// 経験値を初期化する関数
-const initializeExperience = async (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    const sessionTicket = Cookies.get("token");
-    if (!sessionTicket) {
-      reject(new Error("セッションチケットが見つかりません"));
-      return;
-    }
-
-    PlayFab.settings.sessionTicket = sessionTicket;
-    console.log("統計データの初期化開始 - セッションチケット:", sessionTicket);
-
-    // まず統計データが存在するか確認
-    PlayFab.PlayFabClient.GetPlayerStatistics(
-      {
-        StatisticNames: ["Experience"]
-      },
-      (result: PlayFabResult) => {
-        console.log("統計データの確認結果:", result);
-
-        // 統計データが既に存在する場合は初期化をスキップ
-        if (result?.data?.Statistics && result.data.Statistics.length > 0) {
-          console.log("統計データは既に存在します");
-          resolve();
-          return;
-        }
-
-        // 統計データが存在しない場合は初期化を実行
-        PlayFab.PlayFabClient.UpdatePlayerStatistics(
-          {
-            Statistics: [
-              {
-                StatisticName: "Experience",
-                Value: 0
-              }
-            ]
-          },
-          (updateResult: PlayFabResult) => {
-            console.log("統計データの初期化結果:", updateResult);
-            if (updateResult?.error) {
-              console.error("統計データの初期化エラー:", updateResult.error);
-              reject(updateResult.error);
-              return;
-            }
-            resolve();
-          },
-          (error: PlayFabError) => {
-            console.error("統計データの初期化エラー:", error);
-            reject(error);
-          }
-        );
-      },
-      (error: PlayFabError) => {
-        console.error("統計データの確認エラー:", error);
-        reject(error);
-      }
-    );
-  });
-};
-
-// 経験値を取得する関数を改善
-export const getExperience = async (): Promise<number> => {
-  return callPlayFabAPI(async () => {
-    return new Promise<number>((resolve, reject) => {
-      const sessionTicket = Cookies.get("token");
-      if (!sessionTicket) {
-        console.error("セッションチケットが見つかりません");
-        reject(new Error("セッションチケットが見つかりません"));
-        return;
-      }
-
-      PlayFab.settings.sessionTicket = sessionTicket;
-
-      PlayFab.PlayFabClient.GetPlayerStatistics(
-        {
-          StatisticNames: ["Experience"]
-        },
-        (result: PlayFabResult) => {
-          if (result?.data?.Statistics) {
-            const experienceStat = result.data.Statistics.find(
-              (stat) => stat.StatisticName === "Experience"
-            );
-            resolve(experienceStat?.Value || 0);
-          } else {
-            resolve(0);
-          }
-        },
-        (error: PlayFabError) => {
-          console.error("経験値の取得エラー:", error);
           reject(error);
         }
       );
